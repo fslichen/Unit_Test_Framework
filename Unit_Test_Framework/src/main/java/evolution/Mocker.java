@@ -2,8 +2,11 @@ package evolution;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 
@@ -21,6 +24,36 @@ public class Mocker {
 	public Integer mockInt() {
 		Double result = Math.random() * 100;
 		return result.intValue();
+	}
+	
+	public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
+		Type[] types = method.getGenericParameterTypes();
+		String typeName = types[parameterIndex].getTypeName();
+		String[] typeArgumentNames = typeName.substring(typeName.indexOf("<") + 1, typeName.indexOf(">")).split(",");
+		List<Class<?>> typeArguments = new LinkedList<>();
+		for (String typeArgumentName : typeArgumentNames) {
+			Class<?> clazz = Class.forName(typeArgumentName.replace(" ", ""));
+			typeArguments.add(clazz);
+		}
+		return typeArguments;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <T> List<T> mockList(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		Class<?> clazz = typeArguments(method, parameterIndex).get(0);
+		List<T> ts = new LinkedList<>();
+		for (int i = 0; i < 5; i++) {
+			T t = (T) mockPojo(clazz);
+			ts.add(t);
+		}
+		return ts;
+	}
+	
+	@Test
+	public <T> void test0() throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
+		List<T> ts = mockList(method, 0);
+		System.out.println(ts);
 	}
 	
 	public <T> T mockPojo(Class<T> clazz) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
@@ -61,7 +94,7 @@ public class Mocker {
 		return method.invoke(currentInstance, arguments);
 	}
 	
-	@Test
+//	@Test
 	public void test() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		AnyPojo anyPojo = mockPojo(AnyPojo.class);
 		System.out.println(anyPojo);
