@@ -178,7 +178,7 @@ public class Mocker {
 		return setters;
 	}
 	
-	//	@Test
+	@Test
 	public void testMockingInvokingMethod() throws Exception {
 		AnyClass anyClass = new AnyClass();
 		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
@@ -188,23 +188,23 @@ public class Mocker {
 	
 	@Test
 	public <T, V> void testMockObject() throws Exception {
-//		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
-//		List<T> list = mockList(method, 0);
-//		System.out.println(list);
-//		Map<T, V> map = mockMap(method, 1);
-//		System.out.println(map);
+		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
+		List<T> list = mockList(method, 0);
+		System.out.println(list);
+		Map<T, V> map = mockMap(method, 1);
+		System.out.println(map);
 		AnyPojo anyPojo = mockPojo(AnyPojo.class);
 		System.out.println(anyPojo);
 	}
 	
 	@Test
 	public void testReverseEngineer() throws Exception {
-//		reverseEngineer("anyInt", 3);
-//		reverseEngineer("anyString", "PlayBoy");
-//		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
+		reverseEngineer("anyInt", 3);
+		reverseEngineer("anyString", "PlayBoy");
+		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
 	}
 	
-public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
+	public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
 		Type[] types = method.getGenericParameterTypes();
 		String typeName = types[parameterIndex].getTypeName();
 		String[] typeArgumentNames = typeName.substring(typeName.indexOf("<") + 1, typeName.indexOf(">")).split(",");
