@@ -1,6 +1,6 @@
 package evolution;
 
-import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -40,7 +40,7 @@ public class Mocker {
 	}
 	
 	@SuppressWarnings("unchecked")
-	public <T> List<T> mockList(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public <T> List<T> mockList(Method method, int parameterIndex) throws Exception {
 		Class<?> clazz = typeArguments(method, parameterIndex).get(0);
 		List<T> list = new LinkedList<>();
 		for (int i = 0; i < 5; i++) {
@@ -55,18 +55,18 @@ public class Mocker {
 	}
 	
 	@SuppressWarnings("unchecked")
-	public <T> T mockObject(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public <T> T mockObject(Method method, int parameterIndex) throws Exception {
 		Class<?> parameterType = method.getParameterTypes()[parameterIndex];
 		if (parameterType == List.class) {
 			return (T) mockList(method, parameterIndex);
 		} else if (parameterType == Map.class) {
 			return (T) mockMap(method, parameterIndex); 
 		}
-		return null;// TODO Add Set Support
+		return null;
 	}
 	
 	@SuppressWarnings("unchecked")
-	public <T> T mockObject(Class<T> clazz) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public <T> T mockObject(Class<T> clazz) throws Exception {
 		if (clazz == int.class || clazz == Integer.class) {
 			return (T) mockInt();
 		} else if (clazz == String.class) {
@@ -76,11 +76,10 @@ public class Mocker {
 		} else {
 			return mockPojo(clazz);
 		}
-		// TODO Also consider the list and map case.
 	}
 	
 	@SuppressWarnings("unchecked")
-	public <T, V> Map<T, V> mockMap(Method method, int parameterIndex) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+	public <T, V> Map<T, V> mockMap(Method method, int parameterIndex) throws Exception {
 		List<Class<?>> typeArguments = typeArguments(method, parameterIndex);
 		Class<?> keyClass = typeArguments.get(0);
 		Class<?> valueClass = typeArguments.get(1);
@@ -93,28 +92,35 @@ public class Mocker {
 		return map;
 	}
 	
-	public <T> T mockPojo(Class<T> clazz) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-		T t = clazz.newInstance();
+	public <T> List<Method> setters(Class<T> clazz) throws Exception {
 		Method[] methods = clazz.getMethods();
+		List<Method> setters = new LinkedList<>();
 		for (Method method : methods) {
 			if (method.getName().startsWith("set")) {
-				Class<?>[] parameterTypes = method.getParameterTypes();
-				if (parameterTypes.length == 1) {
-					Class<?> parameterType = parameterTypes[0];
-					if (parameterType == String.class) {
-						method.invoke(t, mockString());
-					} else if (parameterType == int.class || parameterType == Integer.class) {
-						method.invoke(t, mockInt());
-					} else {// Invoke recursion if the field is also a POJO.
-						method.invoke(t, mockPojo(parameterType));
-					}
+				if (method.getParameterTypes().length == 1) {
+					setters.add(method);
 				}
+			}
+		}
+		return setters;
+	}
+	
+	public <T> T mockPojo(Class<T> clazz) throws Exception {
+		T t = clazz.newInstance();
+		for (Method method : setters(clazz)) {
+			Class<?> parameterType = method.getParameterTypes()[0];
+			if (parameterType == String.class) {
+				method.invoke(t, mockString());
+			} else if (parameterType == int.class || parameterType == Integer.class) {
+				method.invoke(t, mockInt());
+			} else {// Invoke recursion if the field is also a POJO.
+				method.invoke(t, mockPojo(parameterType));
 			}
 		}
 		return t;
 	}
 	
-	public Object mockInvokingMethod(Method method, Object currentInstance) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+	public Object mockInvokingMethod(Method method, Object currentInstance) throws Exception {
 		Class<?>[] parameterTypes = method.getParameterTypes();
 		Object[] arguments = new Object[parameterTypes.length];
 		int i = 0;
@@ -129,8 +135,66 @@ public class Mocker {
 		return method.invoke(currentInstance, arguments);
 	}
 	
+	public <T> List<Method> getters(Class<T> clazz) throws Exception {
+		Method[] methods = clazz.getMethods();
+		List<Method> setters = new LinkedList<>();
+		for (Method method : methods) {
+			String methodName = method.getName();
+			if (methodName.startsWith("get") && 
+					!"getClass".equals(methodName)) {
+				if (method.getParameterTypes().length == 0) {
+					setters.add(method);
+				}
+			}
+		}
+		return setters;
+	}
+	
+	public String fieldName(Method method) {// Getter or Setter
+		String methodName = method.getName();
+		int startIndex = 3;
+		if ((methodName.startsWith("set") || methodName.startsWith("get"))) {
+			return methodName.substring(startIndex, startIndex + 1).toLowerCase() + methodName.substring(startIndex + 1);
+		}
+		return null;
+	}
+	
+	public String capitalizeFirstCharacter(String string) {
+		return string.substring(0, 1).toUpperCase() + string.substring(1);
+	}
+	
+	public <T> List<String> reverseEngineer(String objectName, T t) throws Exception {
+		Class<?> clazz = t.getClass();
+		List<String> codes = new LinkedList<>();
+		String objectClassName = t.getClass().getSimpleName();
+		codes.add(String.format("%s %s = %s;", objectClassName, objectName, String.format("new %s()", objectClassName)));
+		for (Method getter : getters(clazz)) {
+			try {
+				Class<?> fieldReturnType = getter.getReturnType();
+				String fieldName = fieldName(getter);
+				Object fieldObject = getter.invoke(t);
+				if (fieldReturnType == String.class) {
+					codes.add(String.format("%s.set%s(\"%s\");", objectName, capitalizeFirstCharacter(fieldName), fieldObject));
+				} else if (fieldReturnType == int.class || fieldReturnType == Integer.class) {
+					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldObject));
+				} else {
+					codes.addAll(reverseEngineer(fieldName, fieldObject));
+					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldName));
+				}
+			} catch(Exception e) {}
+		}
+		return codes;
+	}
+	
 	@Test
-	public <T, V> void testMockObject() throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public void testReverseEngineer() throws Exception {
+//		reverseEngineer("anyInt", 3);
+//		reverseEngineer("anyString", "PlayBoy");
+		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
+	}
+	
+//	@Test
+	public <T, V> void testMockObject() throws Exception {
 		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
 		List<T> list = mockList(method, 0);
 		System.out.println(list);
@@ -140,8 +204,8 @@ public class Mocker {
 		System.out.println(anyPojo);
 	}
 	
-	@Test
-	public void testMockingInvokingMethod() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+//	@Test
+	public void testMockingInvokingMethod() throws Exception {
 		AnyClass anyClass = new AnyClass();
 		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
 		Object result = mockInvokingMethod(method, anyClass);
