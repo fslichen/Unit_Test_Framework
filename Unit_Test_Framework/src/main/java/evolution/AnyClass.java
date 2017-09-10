@@ -4,11 +4,11 @@ import java.util.List;
 import java.util.Map;
 
 public class AnyClass {
-	public AnyPojo anyMethod(AnyPojo anyPojo) {
-		return anyPojo;
+	public List<AnyPojo> anyMethod(AnyPojo anyPojo, List<AnyPojo> anyPojos, Map<String, AnyPojo> anyPojoMap) {
+		return anyPojos;
 	}
 	
-	public AnyPojo anotherMethod(List<AnyPojo> anyPojos, Map<String, AnotherPojo> anyotherPojos) {
+	public AnyPojo anotherMethod(AnyPojo anyPojo, List<AnyPojo> anyPojos, Map<String, AnotherPojo> anyotherPojos) {
 		return null;
 	}
 }

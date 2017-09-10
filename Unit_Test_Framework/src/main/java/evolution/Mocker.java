@@ -2,14 +2,15 @@ package evolution;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-
-import org.junit.Test;
+import java.util.TreeMap;
 
 public class Mocker {
 	private List<String> stringVocabulary;
@@ -55,19 +56,31 @@ public class Mocker {
 		return result.intValue();
 	}
 	
-	public Object mockInvokingMethod(Method method, Object currentInstance) throws Exception {
+	public List<String> mockInvokingMethod(Method method, Object currentInstance) throws Exception {
+		List<String> codes = new LinkedList<>();
+		String currentInstanceClassName = currentInstance.getClass().getSimpleName();
+		codes.add(String.format("%s currentInstance = new %s();", currentInstanceClassName, currentInstanceClassName));
 		Class<?>[] parameterTypes = method.getParameterTypes();
 		Object[] arguments = new Object[parameterTypes.length];
 		int i = 0;
+		StringBuilder argumentNames = new StringBuilder();
 		for (Class<?> parameterType : parameterTypes) {
 			if (parameterType == List.class || parameterType == Map.class) {
-				arguments[i] = mockObject(method, i);// TODO Add mockObject for method and parameter index.
+				arguments[i] = mockObject(method, i);
 			} else {
 				arguments[i] = mockObject(parameterType);
 			}
+			String argumentName = "argument" + i;
+			codes.addAll(reverseEngineerObject(argumentName, arguments[i]));
+			argumentNames.append(argumentName + ", ");
 			i++;
 		}
-		return method.invoke(currentInstance, arguments);
+		Object result = method.invoke(currentInstance, arguments);
+		String argumentNamesInString = argumentNames.substring(0, argumentNames.length() - 2);
+		codes.add(String.format("Object result = currentInstance.%s(%s);", method.getName(), argumentNamesInString));
+		codes.add(String.format("assert currentInstance.%s(%s).equals(result);", method.getName(), argumentNamesInString));
+		System.out.println("The result = " + result);
+		return codes;
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -148,11 +161,47 @@ public class Mocker {
 		return stringVocabulary.get(((Double) Math.floor(Math.random() * stringVocabulary.size())).intValue());
 	}
 	
-	public <T> List<String> reverseEngineer(String objectName, T t) throws Exception {
+	public String reverseEngineerList(String itemBaseName, List<?> list, List<String> codes) throws Exception {
+		int i = 0;
+		StringBuilder itemNames = new StringBuilder();
+		for (Object item : list) {
+			String itemName = itemBaseName + i++;
+			codes.addAll(reverseEngineerObject(itemName, item));
+			itemNames.append(itemName + ", ");
+		}
+		return itemNames.substring(0, itemNames.length() - 2);
+	}
+	
+	public List<String> reverseEngineerMap(String itemBaseName, Map<?, ?> map, List<String> codes) throws Exception {
+		int i = 0;
+		String keyClassName = map.keySet().toArray()[0].getClass().getSimpleName();
+		String valueClassName = map.values().toArray()[0].getClass().getSimpleName();
+		codes.add(String.format("Map<%s, %s> %s = new HashMap<>();", keyClassName, valueClassName, itemBaseName));
+		List<String> keyValuePairNames = new LinkedList<>();
+		for (Entry<?, ?> entry : map.entrySet()) {
+			String keyName = itemBaseName + "Key" + i;
+			String valueName = itemBaseName + "Value" + i;
+			codes.addAll(reverseEngineerObject(keyName, entry.getKey()));
+			codes.addAll(reverseEngineerObject(valueName, entry.getValue()));
+			codes.add(String.format("%s.put(%s, %s)", itemBaseName, keyName, valueName));
+			keyValuePairNames.add(keyName + ", " + valueName);
+			i++;
+		}
+		return keyValuePairNames;
+	}
+
+	public <T> List<String> reverseEngineerObject(String objectName, T t) throws Exception {
 		List<String> codes = new LinkedList<>();
 		Class<?> clazz = t.getClass();
-		if (clazz == String.class) {// TODO Add more criteria.
+		if (clazz == String.class) {// TODO Add more criteria. List and Map
 			codes.add(String.format("String %s = \"%s\";", objectName, t));
+		} else if (clazz == int.class || clazz == Integer.class) {
+			codes.add(String.format("Integer %s = %s;", objectName, t));
+		} else if (clazz == LinkedList.class || clazz == ArrayList.class) {
+			List<?> list = (List<?>) t;
+			codes.add(String.format("List<%s> %s = Arrays.asList(%s);", list.get(0).getClass().getSimpleName(), objectName, reverseEngineerList(objectName, list, codes)));
+		} else if (clazz == Map.class || clazz == HashMap.class || clazz == TreeMap.class || clazz == LinkedHashMap.class) {
+			reverseEngineerMap(objectName, (Map<?, ?>) t, codes);
 		} else {// POJO
 			String objectClassName = t.getClass().getSimpleName();
 			codes.add(String.format("%s %s = %s;", objectClassName, objectName, String.format("new %s()", objectClassName)));
@@ -165,27 +214,12 @@ public class Mocker {
 				} else if (fieldType == int.class || fieldType == Integer.class) {
 					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldObject));
 				} else if (fieldType == List.class) {
-					int i = 0;
-					StringBuilder itemNames = new StringBuilder();
-					for (Object item : (List<?>) fieldObject) {
-						String itemName = fieldName + i++;
-						codes.addAll(reverseEngineer(itemName, item));
-						itemNames.append(itemName + ", ");
-					}
-					codes.add(String.format("%s.set%s(Arrays.asList(%s));", objectName, capitalizeFirstCharacter(fieldName), itemNames.substring(0, itemNames.length() - 2)));
+					codes.add(String.format("%s.set%s(Arrays.asList(%s));", objectName, capitalizeFirstCharacter(fieldName), reverseEngineerList(fieldName, (List<?>) fieldObject, codes)));
 				} else if (fieldType == Map.class) {
-					int i = 0;
-					for (Entry<?, ?> entry : ((Map<?, ?>) fieldObject).entrySet()) {
-						String keyName = fieldName + "Key" + i;
-						String valueName = fieldName + "Value" + i;
-						codes.addAll(reverseEngineer(keyName, entry.getKey()));
-						codes.addAll(reverseEngineer(valueName, entry.getValue()));
-						codes.add(String.format("%s.put(%s, %s);", objectName, keyName, valueName));
-						i++;
-					}
-				}
-				else {// POJO
-					codes.addAll(reverseEngineer(fieldName, fieldObject));
+					reverseEngineerMap(fieldName, (Map<?, ?>) fieldObject, codes);
+					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldName));
+				} else {// POJO
+					codes.addAll(reverseEngineerObject(fieldName, fieldObject));
 					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldName));
 				}
 			}
@@ -205,33 +239,7 @@ public class Mocker {
 		}
 		return setters;
 	}
-	
-//	@Test
-	public void testMockingInvokingMethod() throws Exception {
-		AnyClass anyClass = new AnyClass();
-		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
-		Object result = mockInvokingMethod(method, anyClass);
-		System.out.println(result);
-	}
-	
-//	@Test
-	public <T, V> void testMockObject() throws Exception {
-		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
-		List<T> list = mockList(method, 0);
-		System.out.println(list);
-		Map<T, V> map = mockMap(method, 1);
-		System.out.println(map);
-		AnyPojo anyPojo = mockPojo(AnyPojo.class);
-		System.out.println(anyPojo);
-	}
-	
-	@Test
-	public void testReverseEngineer() throws Exception {
-//		reverseEngineer("anyInt", 3);
-//		reverseEngineer("anyString", "PlayBoy");
-		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
-	}
-	
+		
 	public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
 		Type[] types = method.getGenericParameterTypes();
 		String typeName = types[parameterIndex].getTypeName();
