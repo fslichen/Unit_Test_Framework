@@ -80,7 +80,6 @@ public class Mocker {
 	}
 	
 	@SuppressWarnings("unchecked")
-	// TODO Make the exception handling part concise.
 	public <T, V> Map<T, V> mockMap(Method method, int parameterIndex) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
 		List<Class<?>> typeArguments = typeArguments(method, parameterIndex);
 		Class<?> keyClass = typeArguments.get(0);
