@@ -1,6 +1,5 @@
 package evolution;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
@@ -8,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.junit.Test;
 
@@ -103,6 +103,12 @@ public class Mocker {
 			return (T) mockString();
 		} else if (clazz == double.class || clazz == Double.class) {
 			return (T) mockDouble();
+		} else if (clazz == List.class) {
+			System.out.println("Unable to mock list due to type erasure in JVM.");
+			return null;
+		} else if (clazz == Map.class) {
+			System.out.println("Unable to mock map due to type erasure in JVM.");
+			return null;
 		} else {
 			return mockPojo(clazz);
 		}
@@ -143,24 +149,46 @@ public class Mocker {
 	}
 	
 	public <T> List<String> reverseEngineer(String objectName, T t) throws Exception {
-		Class<?> clazz = t.getClass();
 		List<String> codes = new LinkedList<>();
-		String objectClassName = t.getClass().getSimpleName();
-		codes.add(String.format("%s %s = %s;", objectClassName, objectName, String.format("new %s()", objectClassName)));
-		for (Method getter : getters(clazz)) {
-			try {
-				Class<?> fieldReturnType = getter.getReturnType();
+		Class<?> clazz = t.getClass();
+		if (clazz == String.class) {// TODO Add more criteria.
+			codes.add(String.format("String %s = \"%s\";", objectName, t));
+		} else {// POJO
+			String objectClassName = t.getClass().getSimpleName();
+			codes.add(String.format("%s %s = %s;", objectClassName, objectName, String.format("new %s()", objectClassName)));
+			for (Method getter : getters(clazz)) {
+				Class<?> fieldType = getter.getReturnType();
 				String fieldName = fieldName(getter);
 				Object fieldObject = getter.invoke(t);
-				if (fieldReturnType == String.class) {
+				if (fieldType == String.class) {// TODO Add more criteria.
 					codes.add(String.format("%s.set%s(\"%s\");", objectName, capitalizeFirstCharacter(fieldName), fieldObject));
-				} else if (fieldReturnType == int.class || fieldReturnType == Integer.class) {
+				} else if (fieldType == int.class || fieldType == Integer.class) {
 					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldObject));
-				} else {
+				} else if (fieldType == List.class) {
+					int i = 0;
+					StringBuilder itemNames = new StringBuilder();
+					for (Object item : (List<?>) fieldObject) {
+						String itemName = fieldName + i++;
+						codes.addAll(reverseEngineer(itemName, item));
+						itemNames.append(itemName + ", ");
+					}
+					codes.add(String.format("%s.set%s(Arrays.asList(%s));", objectName, capitalizeFirstCharacter(fieldName), itemNames.substring(0, itemNames.length() - 2)));
+				} else if (fieldType == Map.class) {
+					int i = 0;
+					for (Entry<?, ?> entry : ((Map<?, ?>) fieldObject).entrySet()) {
+						String keyName = fieldName + "Key" + i;
+						String valueName = fieldName + "Value" + i;
+						codes.addAll(reverseEngineer(keyName, entry.getKey()));
+						codes.addAll(reverseEngineer(valueName, entry.getValue()));
+						codes.add(String.format("%s.put(%s, %s);", objectName, keyName, valueName));
+						i++;
+					}
+				}
+				else {// POJO
 					codes.addAll(reverseEngineer(fieldName, fieldObject));
 					codes.add(String.format("%s.set%s(%s);", objectName, capitalizeFirstCharacter(fieldName), fieldName));
 				}
-			} catch(Exception e) {}
+			}
 		}
 		return codes;
 	}
@@ -178,7 +206,7 @@ public class Mocker {
 		return setters;
 	}
 	
-	@Test
+//	@Test
 	public void testMockingInvokingMethod() throws Exception {
 		AnyClass anyClass = new AnyClass();
 		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
@@ -186,7 +214,7 @@ public class Mocker {
 		System.out.println(result);
 	}
 	
-	@Test
+//	@Test
 	public <T, V> void testMockObject() throws Exception {
 		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
 		List<T> list = mockList(method, 0);
@@ -199,8 +227,8 @@ public class Mocker {
 	
 	@Test
 	public void testReverseEngineer() throws Exception {
-		reverseEngineer("anyInt", 3);
-		reverseEngineer("anyString", "PlayBoy");
+//		reverseEngineer("anyInt", 3);
+//		reverseEngineer("anyString", "PlayBoy");
 		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
 	}
 	
