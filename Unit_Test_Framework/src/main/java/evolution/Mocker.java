@@ -18,8 +18,36 @@ public class Mocker {
 		stringVocabulary = Arrays.asList("Donald Trump", "cat", "dog", "Abraham Lincoln");
 	}
 	
-	public String mockString() {// Make it smart.
-		return stringVocabulary.get(((Double) Math.floor(Math.random() * stringVocabulary.size())).intValue());
+	public String capitalizeFirstCharacter(String string) {
+		return string.substring(0, 1).toUpperCase() + string.substring(1);
+	}
+	
+	public String fieldName(Method method) {// Getter or Setter
+		String methodName = method.getName();
+		int startIndex = 3;
+		if ((methodName.startsWith("set") || methodName.startsWith("get"))) {
+			return methodName.substring(startIndex, startIndex + 1).toLowerCase() + methodName.substring(startIndex + 1);
+		}
+		return null;
+	}
+	
+	public <T> List<Method> getters(Class<T> clazz) throws Exception {
+		Method[] methods = clazz.getMethods();
+		List<Method> setters = new LinkedList<>();
+		for (Method method : methods) {
+			String methodName = method.getName();
+			if (methodName.startsWith("get") && 
+					!"getClass".equals(methodName)) {
+				if (method.getParameterTypes().length == 0) {
+					setters.add(method);
+				}
+			}
+		}
+		return setters;
+	}
+	
+	public Double mockDouble() {
+		return (Math.random() < .5 ? 1 : -1) * Math.random() * Double.MAX_VALUE;
 	}
 	
 	public Integer mockInt() {
@@ -27,16 +55,19 @@ public class Mocker {
 		return result.intValue();
 	}
 	
-	public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
-		Type[] types = method.getGenericParameterTypes();
-		String typeName = types[parameterIndex].getTypeName();
-		String[] typeArgumentNames = typeName.substring(typeName.indexOf("<") + 1, typeName.indexOf(">")).split(",");
-		List<Class<?>> typeArguments = new LinkedList<>();
-		for (String typeArgumentName : typeArgumentNames) {
-			Class<?> clazz = Class.forName(typeArgumentName.replace(" ", ""));
-			typeArguments.add(clazz);
+	public Object mockInvokingMethod(Method method, Object currentInstance) throws Exception {
+		Class<?>[] parameterTypes = method.getParameterTypes();
+		Object[] arguments = new Object[parameterTypes.length];
+		int i = 0;
+		for (Class<?> parameterType : parameterTypes) {
+			if (parameterType == List.class || parameterType == Map.class) {
+				arguments[i] = mockObject(method, i);// TODO Add mockObject for method and parameter index.
+			} else {
+				arguments[i] = mockObject(parameterType);
+			}
+			i++;
 		}
-		return typeArguments;
+		return method.invoke(currentInstance, arguments);
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -48,34 +79,6 @@ public class Mocker {
 			list.add(t);
 		}
 		return list;
-	}
-	
-	public Double mockDouble() {
-		return (Math.random() < .5 ? 1 : -1) * Math.random() * Double.MAX_VALUE;
-	}
-	
-	@SuppressWarnings("unchecked")
-	public <T> T mockObject(Method method, int parameterIndex) throws Exception {
-		Class<?> parameterType = method.getParameterTypes()[parameterIndex];
-		if (parameterType == List.class) {
-			return (T) mockList(method, parameterIndex);
-		} else if (parameterType == Map.class) {
-			return (T) mockMap(method, parameterIndex); 
-		}
-		return null;
-	}
-	
-	@SuppressWarnings("unchecked")
-	public <T> T mockObject(Class<T> clazz) throws Exception {
-		if (clazz == int.class || clazz == Integer.class) {
-			return (T) mockInt();
-		} else if (clazz == String.class) {
-			return (T) mockString();
-		} else if (clazz == double.class || clazz == Double.class) {
-			return (T) mockDouble();
-		} else {
-			return mockPojo(clazz);
-		}
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -92,17 +95,28 @@ public class Mocker {
 		return map;
 	}
 	
-	public <T> List<Method> setters(Class<T> clazz) throws Exception {
-		Method[] methods = clazz.getMethods();
-		List<Method> setters = new LinkedList<>();
-		for (Method method : methods) {
-			if (method.getName().startsWith("set")) {
-				if (method.getParameterTypes().length == 1) {
-					setters.add(method);
-				}
-			}
+	@SuppressWarnings("unchecked")
+	public <T> T mockObject(Class<T> clazz) throws Exception {
+		if (clazz == int.class || clazz == Integer.class) {
+			return (T) mockInt();
+		} else if (clazz == String.class) {
+			return (T) mockString();
+		} else if (clazz == double.class || clazz == Double.class) {
+			return (T) mockDouble();
+		} else {
+			return mockPojo(clazz);
 		}
-		return setters;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <T> T mockObject(Method method, int parameterIndex) throws Exception {
+		Class<?> parameterType = method.getParameterTypes()[parameterIndex];
+		if (parameterType == List.class) {
+			return (T) mockList(method, parameterIndex);
+		} else if (parameterType == Map.class) {
+			return (T) mockMap(method, parameterIndex); 
+		}
+		return null;
 	}
 	
 	public <T> T mockPojo(Class<T> clazz) throws Exception {
@@ -124,47 +138,8 @@ public class Mocker {
 		return t;
 	}
 	
-	public Object mockInvokingMethod(Method method, Object currentInstance) throws Exception {
-		Class<?>[] parameterTypes = method.getParameterTypes();
-		Object[] arguments = new Object[parameterTypes.length];
-		int i = 0;
-		for (Class<?> parameterType : parameterTypes) {
-			if (parameterType == List.class || parameterType == Map.class) {
-				arguments[i] = mockObject(method, i);// TODO Add mockObject for method and parameter index.
-			} else {
-				arguments[i] = mockObject(parameterType);
-			}
-			i++;
-		}
-		return method.invoke(currentInstance, arguments);
-	}
-	
-	public <T> List<Method> getters(Class<T> clazz) throws Exception {
-		Method[] methods = clazz.getMethods();
-		List<Method> setters = new LinkedList<>();
-		for (Method method : methods) {
-			String methodName = method.getName();
-			if (methodName.startsWith("get") && 
-					!"getClass".equals(methodName)) {
-				if (method.getParameterTypes().length == 0) {
-					setters.add(method);
-				}
-			}
-		}
-		return setters;
-	}
-	
-	public String fieldName(Method method) {// Getter or Setter
-		String methodName = method.getName();
-		int startIndex = 3;
-		if ((methodName.startsWith("set") || methodName.startsWith("get"))) {
-			return methodName.substring(startIndex, startIndex + 1).toLowerCase() + methodName.substring(startIndex + 1);
-		}
-		return null;
-	}
-	
-	public String capitalizeFirstCharacter(String string) {
-		return string.substring(0, 1).toUpperCase() + string.substring(1);
+	public String mockString() {// Make it smart.
+		return stringVocabulary.get(((Double) Math.floor(Math.random() * stringVocabulary.size())).intValue());
 	}
 	
 	public <T> List<String> reverseEngineer(String objectName, T t) throws Exception {
@@ -190,11 +165,25 @@ public class Mocker {
 		return codes;
 	}
 	
-	@Test
-	public void testReverseEngineer() throws Exception {
-//		reverseEngineer("anyInt", 3);
-//		reverseEngineer("anyString", "PlayBoy");
-//		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
+	public <T> List<Method> setters(Class<T> clazz) throws Exception {
+		Method[] methods = clazz.getMethods();
+		List<Method> setters = new LinkedList<>();
+		for (Method method : methods) {
+			if (method.getName().startsWith("set")) {
+				if (method.getParameterTypes().length == 1) {
+					setters.add(method);
+				}
+			}
+		}
+		return setters;
+	}
+	
+	//	@Test
+	public void testMockingInvokingMethod() throws Exception {
+		AnyClass anyClass = new AnyClass();
+		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
+		Object result = mockInvokingMethod(method, anyClass);
+		System.out.println(result);
 	}
 	
 	@Test
@@ -208,11 +197,22 @@ public class Mocker {
 		System.out.println(anyPojo);
 	}
 	
-//	@Test
-	public void testMockingInvokingMethod() throws Exception {
-		AnyClass anyClass = new AnyClass();
-		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
-		Object result = mockInvokingMethod(method, anyClass);
-		System.out.println(result);
+	@Test
+	public void testReverseEngineer() throws Exception {
+//		reverseEngineer("anyInt", 3);
+//		reverseEngineer("anyString", "PlayBoy");
+//		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
+	}
+	
+public List<Class<?>> typeArguments(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException {
+		Type[] types = method.getGenericParameterTypes();
+		String typeName = types[parameterIndex].getTypeName();
+		String[] typeArgumentNames = typeName.substring(typeName.indexOf("<") + 1, typeName.indexOf(">")).split(",");
+		List<Class<?>> typeArguments = new LinkedList<>();
+		for (String typeArgumentName : typeArgumentNames) {
+			Class<?> clazz = Class.forName(typeArgumentName.replace(" ", ""));
+			typeArguments.add(clazz);
+		}
+		return typeArguments;
 	}
 }
