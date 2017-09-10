@@ -4,6 +4,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,7 @@ public class Mocker {
 	}
 	
 	public Integer mockInt() {
-		Double result = Math.random() * 100;
+		Double result = (Math.random() < .5 ? 1 : -1) * Math.random() * Integer.MAX_VALUE;
 		return result.intValue();
 	}
 	
@@ -41,19 +42,56 @@ public class Mocker {
 	@SuppressWarnings("unchecked")
 	public <T> List<T> mockList(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
 		Class<?> clazz = typeArguments(method, parameterIndex).get(0);
-		List<T> ts = new LinkedList<>();
+		List<T> list = new LinkedList<>();
 		for (int i = 0; i < 5; i++) {
-			T t = (T) mockPojo(clazz);
-			ts.add(t);
+			T t = (T) mockObject(clazz);
+			list.add(t);
 		}
-		return ts;
+		return list;
 	}
 	
-	@Test
-	public <T> void test0() throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
-		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
-		List<T> ts = mockList(method, 0);
-		System.out.println(ts);
+	public Double mockDouble() {
+		return (Math.random() < .5 ? 1 : -1) * Math.random() * Double.MAX_VALUE;
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <T> T mockObject(Method method, int parameterIndex) throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		Class<?> parameterType = method.getParameterTypes()[parameterIndex];
+		if (parameterType == List.class) {
+			return (T) mockList(method, parameterIndex);
+		} else if (parameterType == Map.class) {
+			return (T) mockMap(method, parameterIndex); 
+		}
+		return null;// TODO Add Set Support
+	}
+	
+	@SuppressWarnings("unchecked")
+	public <T> T mockObject(Class<T> clazz) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		if (clazz == int.class || clazz == Integer.class) {
+			return (T) mockInt();
+		} else if (clazz == String.class) {
+			return (T) mockString();
+		} else if (clazz == double.class || clazz == Double.class) {
+			return (T) mockDouble();
+		} else {
+			return mockPojo(clazz);
+		}
+		// TODO Also consider the list and map case.
+	}
+	
+	@SuppressWarnings("unchecked")
+	// TODO Make the exception handling part concise.
+	public <T, V> Map<T, V> mockMap(Method method, int parameterIndex) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+		List<Class<?>> typeArguments = typeArguments(method, parameterIndex);
+		Class<?> keyClass = typeArguments.get(0);
+		Class<?> valueClass = typeArguments.get(1);
+		Map<T, V> map = new HashMap<>();
+		for (int i = 0; i < 5; i++) {// TODO Make the size random.
+			T t = (T) mockObject(keyClass);
+			V v = (V) mockObject(valueClass);
+			map.put(t, v);
+		}
+		return map;
 	}
 	
 	public <T> T mockPojo(Class<T> clazz) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
@@ -77,27 +115,37 @@ public class Mocker {
 		return t;
 	}
 	
-	public Object mockInvokingMethod(Method method, Object currentInstance) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	public Object mockInvokingMethod(Method method, Object currentInstance) throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
 		Class<?>[] parameterTypes = method.getParameterTypes();
 		Object[] arguments = new Object[parameterTypes.length];
 		int i = 0;
 		for (Class<?> parameterType : parameterTypes) {
-			if (parameterType == String.class) {
-				arguments[i] = mockString();
-			} else if (parameterType == int.class || parameterType == Integer.class) {
-				arguments[i] = mockInt();
+			if (parameterType == List.class || parameterType == Map.class) {
+				arguments[i] = mockObject(method, i);// TODO Add mockObject for method and parameter index.
 			} else {
-				arguments[i] = mockPojo(parameterType);
+				arguments[i] = mockObject(parameterType);
 			}
 			i++;
 		}
 		return method.invoke(currentInstance, arguments);
 	}
 	
-//	@Test
-	public void test() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+	@Test
+	public <T, V> void testMockObject() throws NoSuchMethodException, SecurityException, ClassNotFoundException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
+		List<T> list = mockList(method, 0);
+		System.out.println(list);
+		Map<T, V> map = mockMap(method, 1);
+		System.out.println(map);
 		AnyPojo anyPojo = mockPojo(AnyPojo.class);
 		System.out.println(anyPojo);
-//		mockInvokingMethod();
+	}
+	
+	@Test
+	public void testMockingInvokingMethod() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, ClassNotFoundException {
+		AnyClass anyClass = new AnyClass();
+		Method method = AnyClass.class.getMethod("anyMethod", AnyPojo.class);
+		Object result = mockInvokingMethod(method, anyClass);
+		System.out.println(result);
 	}
 }
