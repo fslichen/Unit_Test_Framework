@@ -107,14 +107,18 @@ public class Mocker {
 	
 	public <T> T mockPojo(Class<T> clazz) throws Exception {
 		T t = clazz.newInstance();
-		for (Method method : setters(clazz)) {
-			Class<?> parameterType = method.getParameterTypes()[0];
+		for (Method setter : setters(clazz)) {
+			Class<?> parameterType = setter.getParameterTypes()[0];
 			if (parameterType == String.class) {
-				method.invoke(t, mockString());
+				setter.invoke(t, mockString());
 			} else if (parameterType == int.class || parameterType == Integer.class) {
-				method.invoke(t, mockInt());
+				setter.invoke(t, mockInt());
+			} else if (parameterType == List.class) {
+				setter.invoke(t, mockList(setter, 0));
+			} else if (parameterType == Map.class) {
+				setter.invoke(t, mockMap(setter, 0));
 			} else {// Invoke recursion if the field is also a POJO.
-				method.invoke(t, mockPojo(parameterType));
+				setter.invoke(t, mockPojo(parameterType));
 			}
 		}
 		return t;
@@ -190,16 +194,16 @@ public class Mocker {
 	public void testReverseEngineer() throws Exception {
 //		reverseEngineer("anyInt", 3);
 //		reverseEngineer("anyString", "PlayBoy");
-		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
+//		reverseEngineer("anyPojo", mockObject(AnyPojo.class)).forEach(System.out::println);
 	}
 	
-//	@Test
+	@Test
 	public <T, V> void testMockObject() throws Exception {
-		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
-		List<T> list = mockList(method, 0);
-		System.out.println(list);
-		Map<T, V> map = mockMap(method, 1);
-		System.out.println(map);
+//		Method method = AnyClass.class.getMethod("anotherMethod", List.class, Map.class);
+//		List<T> list = mockList(method, 0);
+//		System.out.println(list);
+//		Map<T, V> map = mockMap(method, 1);
+//		System.out.println(map);
 		AnyPojo anyPojo = mockPojo(AnyPojo.class);
 		System.out.println(anyPojo);
 	}
